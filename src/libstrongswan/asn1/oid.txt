@@ -70,6 +70,15 @@
     0x37                     "targetInformation"		OID_TARGET_INFORMATION
     0x38                     "noRevAvail"				OID_NO_REV_AVAIL
 0x2A                         ""
+  0x81                       ""
+    0x1C                     "cn"
+      0xCF                   ""
+        0x55                 "oscca"
+          0x01               "gmt"
+            0x82             ""
+              0x2D           "sm2"             OID_SM2_PUBKEY
+            0x83             ""
+              0x75           "sm2-with-sm3"    OID_SM2_WITH_SM3
   0x83                       ""
     0x08                     "jp"
       0x8C                   ""

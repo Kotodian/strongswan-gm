@@ -75,6 +75,7 @@ static char* lookup_algorithm(uint16_t ikev2_algo, size_t *key_size)
 		{ENCR_IDEA, 		"idea-cbc",		16,		16,		 16},
 		{ENCR_CAST, 		"cast5-cbc",	16,		 5,		 16},
 		{ENCR_BLOWFISH, 	"bf-cbc",		16,		 5,		 56},
+		{ENCR_SM4_CBC,		"sm4-cbc",		16,		16,		 16},
 	};
 	int i;
 

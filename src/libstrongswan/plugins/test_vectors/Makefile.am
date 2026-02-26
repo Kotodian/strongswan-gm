@@ -56,6 +56,8 @@ libstrongswan_test_vectors_la_SOURCES = \
 	test_vectors/ml_kem.c \
 	test_vectors/drbg_ctr.c \
 	test_vectors/drbg_hmac.c \
-	test_vectors/rng.c
+	test_vectors/rng.c \
+	test_vectors/sm3.c \
+	test_vectors/sm4_cbc.c
 
 libstrongswan_test_vectors_la_LDFLAGS = -module -avoid-version

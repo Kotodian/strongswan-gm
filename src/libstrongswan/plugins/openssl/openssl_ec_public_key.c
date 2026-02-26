@@ -30,6 +30,7 @@
 
 #if OPENSSL_VERSION_NUMBER >= 0x30000000L
 #include <openssl/core_names.h>
+#include <openssl/decoder.h>
 #endif
 
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
@@ -183,6 +184,35 @@ error:
 	return matches;
 }
 
+#if OPENSSL_VERSION_NUMBER >= 0x1010100fL && !defined(OPENSSL_NO_SM2)
+/**
+ * Verify a SM2 signature with SM3 hash, using the Distinguishing Identifier
+ * as defined in GM/T 0009.
+ */
+static bool verify_sm2_signature(private_openssl_ec_public_key_t *this,
+								 chunk_t data, chunk_t signature)
+{
+	EVP_MD_CTX *ctx;
+	bool valid = FALSE;
+
+	ctx = EVP_MD_CTX_new();
+	if (!ctx)
+	{
+		return FALSE;
+	}
+	if (EVP_DigestVerifyInit(ctx, NULL, EVP_sm3(), NULL, this->key) <= 0 ||
+		EVP_DigestVerifyUpdate(ctx, data.ptr, data.len) <= 0 ||
+		EVP_DigestVerifyFinal(ctx, signature.ptr, signature.len) != 1)
+	{
+		goto out;
+	}
+	valid = TRUE;
+out:
+	EVP_MD_CTX_free(ctx);
+	return valid;
+}
+#endif /* OPENSSL_VERSION_NUMBER >= 0x1010100fL && !OPENSSL_NO_SM2 */
+
 /**
  * Verify a RFC 4754 signature for a specified curve and hash algorithm
  */
@@ -202,6 +232,13 @@ static bool verify_curve_signature(private_openssl_ec_public_key_t *this,
 METHOD(public_key_t, get_type, key_type_t,
 	private_openssl_ec_public_key_t *this)
 {
+#if OPENSSL_VERSION_NUMBER >= 0x1010100fL && !defined(OPENSSL_NO_SM2)
+	if (EVP_PKEY_is_a(this->key, "SM2") ||
+		openssl_check_ec_key_curve(this->key, NID_sm2))
+	{
+		return KEY_SM2;
+	}
+#endif
 	return KEY_ECDSA;
 }
 
@@ -230,6 +267,10 @@ METHOD(public_key_t, verify, bool,
 		case SIGN_ECDSA_521:
 			return verify_curve_signature(this, scheme, NID_sha512,
 										  NID_secp521r1, data, signature);
+#if OPENSSL_VERSION_NUMBER >= 0x1010100fL && !defined(OPENSSL_NO_SM2)
+		case SIGN_SM2_WITH_SM3:
+			return verify_sm2_signature(this, data, signature);
+#endif
 		default:
 			DBG1(DBG_LIB, "signature scheme %N not supported in EC",
 				 signature_scheme_names, scheme);
@@ -343,13 +384,59 @@ openssl_ec_public_key_t *openssl_ec_public_key_load(key_type_t type,
 		}
 		break;
 	}
-	key = d2i_PUBKEY(NULL, (const u_char**)&blob.ptr, blob.len);
-	if (!key || EVP_PKEY_base_id(key) != EVP_PKEY_EC ||
+	{
+		/* save original blob since d2i_PUBKEY advances the pointer */
+		const u_char *der = (const u_char*)blob.ptr;
+		size_t der_len = blob.len;
+
+		key = d2i_PUBKEY(NULL, (const u_char**)&blob.ptr, blob.len);
+		if (!key)
+		{
+			return NULL;
+		}
+#if OPENSSL_VERSION_NUMBER >= 0x1010100fL && !defined(OPENSSL_NO_SM2)
+		if (EVP_PKEY_is_a(key, "SM2"))
+		{
+			goto build;
+		}
+#if OPENSSL_VERSION_NUMBER >= 0x30000000L
+		if (EVP_PKEY_base_id(key) == EVP_PKEY_EC &&
+			openssl_check_ec_key_curve(key, NID_sm2))
+		{
+			/* d2i_PUBKEY() created an EC-typed key for an id-ecPublicKey SPKI
+			 * with SM2 curve.  Re-decode as SM2 so OpenSSL 3.x handles SM2
+			 * operations (EVP_DigestVerify with SM3 / X509_verify). */
+			EVP_PKEY *sm2_key = NULL;
+			const unsigned char *p = der;
+			size_t plen = der_len;
+			OSSL_DECODER_CTX *dctx;
+
+			dctx = OSSL_DECODER_CTX_new_for_pkey(&sm2_key, "DER",
+						"SubjectPublicKeyInfo", "SM2",
+						EVP_PKEY_PUBLIC_KEY, NULL, NULL);
+			if (dctx)
+			{
+				if (OSSL_DECODER_from_data(dctx, &p, &plen) == 1 && sm2_key)
+				{
+					EVP_PKEY_free(key);
+					key = sm2_key;
+				}
+				OSSL_DECODER_CTX_free(dctx);
+			}
+			goto build;
+		}
+#endif
+#endif
+	}
+	if (EVP_PKEY_base_id(key) != EVP_PKEY_EC ||
 		openssl_check_explicit_params(key))
 	{
 		EVP_PKEY_free(key);
 		return NULL;
 	}
+#if OPENSSL_VERSION_NUMBER >= 0x1010100fL && !defined(OPENSSL_NO_SM2)
+build:
+#endif
 
 	INIT(this,
 		.public = {

@@ -62,6 +62,7 @@ ext_out_function_t xof_mgf1_from_hash_algorithm(hash_algorithm_t alg)
 		case HASH_UNKNOWN:
 		case HASH_MD4:
 		case HASH_MD5:
+		case HASH_SM3:
 			break;
 	}
 	return XOF_UNDEFINED;

@@ -79,6 +79,11 @@ static inline void X509_get0_signature(ASN1_BIT_STRING **psig, X509_ALGOR **palg
 #define X509_get0_notAfter X509_get_notAfter
 #endif
 
+#if OPENSSL_VERSION_NUMBER >= 0x1010100fL && !defined(OPENSSL_NO_SM2)
+/* from openssl_ec_public_key */
+bool openssl_check_ec_key_curve(EVP_PKEY *key, int nid_curve);
+#endif
+
 typedef struct private_openssl_x509_t private_openssl_x509_t;
 
 /**
@@ -416,7 +421,7 @@ METHOD(certificate_t, issued_by, bool,
 	signature_params_t **scheme)
 {
 	public_key_t *key;
-	bool valid;
+	bool valid = FALSE;
 	x509_t *x509 = (x509_t*)issuer;
 	chunk_t keyid = chunk_empty;
 #if OPENSSL_VERSION_NUMBER >= 0x10100000L
@@ -468,6 +473,37 @@ METHOD(certificate_t, issued_by, bool,
 	{
 		return FALSE;
 	}
+#if OPENSSL_VERSION_NUMBER >= 0x1010100fL && !defined(OPENSSL_NO_SM2)
+	if (this->scheme->scheme == SIGN_SM2_WITH_SM3)
+	{
+		/* SM2 signature verification requires OpenSSL's X509_verify() because
+		 * the SM2 Z-value computation needs the signer's public key and SM2 ID
+		 * to produce the correct digest.  We obtain the issuer's EVP_PKEY by
+		 * parsing the issuer certificate DER via d2i_X509() so that OpenSSL
+		 * correctly recognises the key type as SM2. */
+		chunk_t issuer_enc;
+
+		if (issuer->get_encoding(issuer, CERT_ASN1_DER, &issuer_enc))
+		{
+			const unsigned char *p = issuer_enc.ptr;
+			X509 *issuer_x509 = d2i_X509(NULL, &p, issuer_enc.len);
+
+			free(issuer_enc.ptr);
+			if (issuer_x509)
+			{
+				EVP_PKEY *evp = X509_get0_pubkey(issuer_x509);
+
+				if (evp)
+				{
+					valid = (X509_verify(this->x509, evp) == 1);
+				}
+				X509_free(issuer_x509);
+			}
+		}
+		key->destroy(key);
+		goto out;
+	}
+#endif
 	/* i2d_re_X509_tbs() was added with 1.1.0 when X509 was made opaque */
 #if OPENSSL_VERSION_NUMBER >= 0x10100000L
 	tbs = openssl_i2chunk(re_X509_tbs, this->x509);
@@ -1225,14 +1261,36 @@ static bool parse_certificate(private_openssl_x509_t *this)
 					BUILD_END);
 			break;
 		case OID_EC_PUBLICKEY:
-			/* for ECDSA, we need the full subjectPublicKeyInfo, as it contains
-			 * the curve parameters. */
+		{
+			key_type_t ec_type = KEY_ECDSA;
+#if OPENSSL_VERSION_NUMBER >= 0x1010100fL && !defined(OPENSSL_NO_SM2)
+			if (EVP_PKEY_is_a(X509_get0_pubkey(this->x509), "SM2") ||
+				openssl_check_ec_key_curve(X509_get0_pubkey(this->x509),
+										   NID_sm2))
+			{
+				ec_type = KEY_SM2;
+			}
+#endif
+			/* for EC/SM2, we need the full subjectPublicKeyInfo, as it
+			 * contains the curve parameters. */
 			chunk = openssl_i2chunk(X509_PUBKEY, X509_get_X509_PUBKEY(this->x509));
 			this->pubkey = lib->creds->create(lib->creds,
-					CRED_PUBLIC_KEY, KEY_ECDSA, BUILD_BLOB_ASN1_DER,
+					CRED_PUBLIC_KEY, ec_type, BUILD_BLOB_ASN1_DER,
 					chunk, BUILD_END);
 			free(chunk.ptr);
 			break;
+		}
+#if OPENSSL_VERSION_NUMBER >= 0x1010100fL && !defined(OPENSSL_NO_SM2)
+		case OID_SM2_PUBKEY:
+			/* SM2 certificates per GB/T 35276-2017 use the SM2 OID directly
+			 * as the SubjectPublicKeyInfo algorithm */
+			chunk = openssl_i2chunk(X509_PUBKEY, X509_get_X509_PUBKEY(this->x509));
+			this->pubkey = lib->creds->create(lib->creds,
+					CRED_PUBLIC_KEY, KEY_SM2, BUILD_BLOB_ASN1_DER,
+					chunk, BUILD_END);
+			free(chunk.ptr);
+			break;
+#endif
 		case OID_ED25519:
 			ed_type = KEY_ED25519;
 			/* fall-through */

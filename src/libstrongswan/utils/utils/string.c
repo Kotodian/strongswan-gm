@@ -30,7 +30,7 @@ char* translate(char *str, const char *from, const char *to)
 	while (pos && *pos)
 	{
 		char *match;
-		if ((match = strchr(from, *pos)) != NULL)
+		if ((match = (char*)strchr(from, *pos)) != NULL)
 		{
 			*pos = to[match - from];
 		}
@@ -70,7 +70,7 @@ char* strreplace(const char *str, const char *search, const char *replace)
 	{
 		len = strlen(str);
 	}
-	found = strstr(str, search);
+	found = (char*)strstr(str, search);
 	if (!found)
 	{
 		return (char*)str;

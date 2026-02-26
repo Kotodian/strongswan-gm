@@ -64,6 +64,34 @@ struct private_openssl_ec_private_key_t {
 bool openssl_check_ec_key_curve(EVP_PKEY *key, int nid_curve);
 bool openssl_check_explicit_params(EVP_PKEY *key);
 
+#if OPENSSL_VERSION_NUMBER >= 0x1010100fL && !defined(OPENSSL_NO_SM2)
+/**
+ * Build a SM2 signature with SM3 hash, using the Distinguishing Identifier
+ * as defined in GM/T 0009.
+ */
+static bool build_sm2_signature(private_openssl_ec_private_key_t *this,
+								chunk_t data, chunk_t *signature)
+{
+	EVP_MD_CTX *ctx;
+	bool success = FALSE;
+
+	*signature = chunk_alloc(EVP_PKEY_size(this->key));
+	ctx = EVP_MD_CTX_new();
+	if (!ctx ||
+		EVP_DigestSignInit(ctx, NULL, EVP_sm3(), NULL, this->key) <= 0 ||
+		EVP_DigestSignUpdate(ctx, data.ptr, data.len) <= 0 ||
+		EVP_DigestSignFinal(ctx, signature->ptr, &signature->len) != 1)
+	{
+		chunk_free(signature);
+		goto out;
+	}
+	success = TRUE;
+out:
+	EVP_MD_CTX_free(ctx);
+	return success;
+}
+#endif /* OPENSSL_VERSION_NUMBER >= 0x1010100fL && !OPENSSL_NO_SM2 */
+
 /**
  * Build a DER encoded signature as in RFC 3279
  */
@@ -180,6 +208,10 @@ METHOD(private_key_t, sign, bool,
 		case SIGN_ECDSA_521:
 			return build_curve_signature(this, scheme, NID_sha512,
 										 NID_secp521r1, data, signature);
+#if OPENSSL_VERSION_NUMBER >= 0x1010100fL && !defined(OPENSSL_NO_SM2)
+		case SIGN_SM2_WITH_SM3:
+			return build_sm2_signature(this, data, signature);
+#endif
 		default:
 			DBG1(DBG_LIB, "signature scheme %N not supported",
 				 signature_scheme_names, scheme);
@@ -204,6 +236,13 @@ METHOD(private_key_t, get_keysize, int,
 METHOD(private_key_t, get_type, key_type_t,
 	private_openssl_ec_private_key_t *this)
 {
+#if OPENSSL_VERSION_NUMBER >= 0x1010100fL && !defined(OPENSSL_NO_SM2)
+	if (EVP_PKEY_is_a(this->key, "SM2") ||
+		openssl_check_ec_key_curve(this->key, NID_sm2))
+	{
+		return KEY_SM2;
+	}
+#endif
 	return KEY_ECDSA;
 }
 
@@ -212,9 +251,11 @@ METHOD(private_key_t, get_public_key, public_key_t*,
 {
 	public_key_t *public;
 	chunk_t key;
+	key_type_t type;
 
+	type = get_type(this);
 	key = openssl_i2chunk(PUBKEY, this->key);
-	public = lib->creds->create(lib->creds, CRED_PUBLIC_KEY, KEY_ECDSA,
+	public = lib->creds->create(lib->creds, CRED_PUBLIC_KEY, type,
 								BUILD_BLOB_ASN1_DER, key, BUILD_END);
 	free(key.ptr);
 	return public;
@@ -358,6 +399,44 @@ openssl_ec_private_key_t *openssl_ec_private_key_gen(key_type_t type,
 		return NULL;
 	}
 
+#if OPENSSL_VERSION_NUMBER >= 0x1010100fL && !defined(OPENSSL_NO_SM2)
+	if (type == KEY_SM2)
+	{
+#if OPENSSL_VERSION_NUMBER >= 0x30000000L
+		{
+			EVP_PKEY_CTX *genctx = EVP_PKEY_CTX_new_from_name(NULL, "SM2", NULL);
+			if (genctx && EVP_PKEY_keygen_init(genctx) > 0)
+			{
+				EVP_PKEY_keygen(genctx, &key);
+			}
+			EVP_PKEY_CTX_free(genctx);
+		}
+#else
+		EC_KEY *ec = EC_KEY_new_by_curve_name(NID_sm2);
+		if (ec && EC_KEY_generate_key(ec) == 1)
+		{
+			key = EVP_PKEY_new();
+			if (!EVP_PKEY_assign_EC_KEY(key, ec))
+			{
+				EC_KEY_free(ec);
+				EVP_PKEY_free(key);
+				key = NULL;
+			}
+		}
+		else
+		{
+			EC_KEY_free(ec);
+		}
+#endif
+		if (!key)
+		{
+			return NULL;
+		}
+		this = create_internal(key);
+		return &this->public;
+	}
+#endif /* OPENSSL_VERSION_NUMBER >= 0x1010100fL && !OPENSSL_NO_SM2 */
+
 #if OPENSSL_VERSION_NUMBER >= 0x30000000L
 	switch (key_size)
 	{
@@ -471,8 +550,20 @@ openssl_ec_private_key_t *openssl_ec_private_key_load(key_type_t type,
 	}
 	else
 	{
-		key = d2i_PrivateKey(EVP_PKEY_EC, NULL, (const u_char**)&blob.ptr,
-							 blob.len);
+#if OPENSSL_VERSION_NUMBER >= 0x1010100fL && !defined(OPENSSL_NO_SM2)
+		if (type == KEY_SM2)
+		{
+			/* SM2: blob is full PKCS#8 PrivateKeyInfo since ECPrivateKey
+			 * doesn't embed the SM2 curve OID */
+			key = d2i_AutoPrivateKey(NULL, (const u_char**)&blob.ptr,
+									blob.len);
+		}
+		else
+#endif
+		{
+			key = d2i_PrivateKey(EVP_PKEY_EC, NULL, (const u_char**)&blob.ptr,
+								blob.len);
+		}
 	}
 
 	if (!key || openssl_check_explicit_params(key))

@@ -79,8 +79,23 @@ static private_key_t *parse_private_key(chunk_t blob)
 						type = KEY_RSA;
 						break;
 					case OID_EC_PUBLICKEY:
-						type = KEY_ECDSA;
+					{
+						chunk_t curve = params;
+						if (asn1_parse_simple_object(&curve, ASN1_OID, 0, "curve") &&
+							asn1_known_oid(curve) == OID_SM2_PUBKEY)
+						{
+							type = KEY_SM2;
+							/* SM2 ECPrivateKey blobs embed the curve OID in their
+							 * optional [1] parameters field; pass no params so the
+							 * loader uses d2i_PrivateKey directly (OpenSSL 3.x) */
+							params = chunk_empty;
+						}
+						else
+						{
+							type = KEY_ECDSA;
+						}
 						break;
+					}
 					case OID_ED25519:
 						type = KEY_ED25519;
 						part = BUILD_EDDSA_PRIV_ASN1_DER;
@@ -98,7 +113,15 @@ static private_key_t *parse_private_key(chunk_t blob)
 			case PKINFO_PRIVATE_KEY:
 			{
 				DBG2(DBG_ASN, "-- > --");
-				if (params.len &&
+				if (type == KEY_SM2)
+				{
+					/* SM2 ECPrivateKey blobs don't embed the curve OID,
+					 * pass the full PKCS#8 PrivateKeyInfo so the loader
+					 * can extract the curve from AlgorithmIdentifier */
+					key = lib->creds->create(lib->creds, CRED_PRIVATE_KEY,
+											 type, part, blob, BUILD_END);
+				}
+				else if (params.len &&
 					!chunk_equals(params, chunk_from_chars(0x05, 0x00)))
 				{
 					key = lib->creds->create(lib->creds, CRED_PRIVATE_KEY,

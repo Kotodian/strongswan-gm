@@ -21,16 +21,17 @@
 #include "public_key.h"
 #include "signature_params.h"
 
-ENUM(key_type_names, KEY_ANY, KEY_ED448,
+ENUM(key_type_names, KEY_ANY, KEY_SM2,
 	"ANY",
 	"RSA",
 	"ECDSA",
 	"DSA",
 	"ED25519",
 	"ED448",
+	"SM2",
 );
 
-ENUM(signature_scheme_names, SIGN_UNKNOWN, SIGN_ED448,
+ENUM(signature_scheme_names, SIGN_UNKNOWN, SIGN_SM2_WITH_SM3,
 	"UNKNOWN",
 	"RSA_EMSA_PKCS1_NULL",
 	"RSA_EMSA_PKCS1_MD5",
@@ -54,6 +55,7 @@ ENUM(signature_scheme_names, SIGN_UNKNOWN, SIGN_ED448,
 	"ECDSA-521",
 	"ED25519",
 	"ED448",
+	"SM2_WITH_SM3",
 );
 
 ENUM(encryption_scheme_names, ENCRYPT_UNKNOWN, ENCRYPT_RSA_OAEP_SHA512,
@@ -157,6 +159,9 @@ signature_scheme_t signature_scheme_from_oid(int oid)
 			return SIGN_ED25519;
 		case OID_ED448:
 			return SIGN_ED448;
+		case OID_SM2_PUBKEY:
+		case OID_SM2_WITH_SM3:
+			return SIGN_SM2_WITH_SM3;
 	}
 	return SIGN_UNKNOWN;
 }
@@ -209,6 +214,8 @@ int signature_scheme_to_oid(signature_scheme_t scheme)
 			return OID_ED25519;
 		case SIGN_ED448:
 			return OID_ED448;
+		case SIGN_SM2_WITH_SM3:
+			return OID_SM2_WITH_SM3;
 	}
 	return OID_UNKNOWN;
 }
@@ -247,6 +254,7 @@ static struct {
 	{ KEY_ECDSA,   0, { .scheme = SIGN_ECDSA_WITH_SHA512_DER }},
 	{ KEY_ED25519, 0, { .scheme = SIGN_ED25519 }},
 	{ KEY_ED448,   0, { .scheme = SIGN_ED448 }},
+	{ KEY_SM2,     0, { .scheme = SIGN_SM2_WITH_SM3 }},
 };
 
 /**
@@ -335,6 +343,8 @@ key_type_t key_type_from_signature_scheme(signature_scheme_t scheme)
 			return KEY_ED25519;
 		case SIGN_ED448:
 			return KEY_ED448;
+		case SIGN_SM2_WITH_SM3:
+			return KEY_SM2;
 	}
 	return KEY_ANY;
 }
