@@ -1,3 +1,5 @@
+**English** | [中文](README.zh-CN.md)
+
 # strongSwan Configuration #
 
 ## Overview ##
@@ -506,6 +508,76 @@ Configuration on roadwarrior _carol_:
                 secret = Ar3etTnp
             }
         }
+
+
+## GuoMi (SM2/SM3/SM4) Algorithm Support ##
+
+This fork adds support for Chinese national cryptographic standards (GuoMi/GM)
+in IKEv2 and ESP, implemented via the OpenSSL plugin.
+
+### Supported Algorithms ###
+
+| Algorithm | Standard | Usage | Identifier |
+|-----------|----------|-------|------------|
+| SM2 | GB/T 32918 | Public key authentication (ECDSA-like on SM2 curve) | `SIGN_SM2_WITH_SM3` |
+| SM3 | GB/T 32905 | Hash, HMAC integrity (128/256-bit), PRF | `HASH_SM3`, `AUTH_HMAC_SM3_128`, `PRF_HMAC_SM3` |
+| SM4-CBC | GB/T 32907 | Block cipher encryption (128-bit key) | `ENCR_SM4_CBC` |
+
+### Proposal Keywords ###
+
+Use these keywords in `swanctl.conf` proposals:
+
+| Keyword | Transform | Description |
+|---------|-----------|-------------|
+| `sm4cbc` | Encryption | SM4 in CBC mode, 128-bit key |
+| `sm3` | Integrity | HMAC-SM3 with 128-bit truncation |
+| `prfsm3` | PRF | HMAC-SM3 pseudo-random function |
+
+### Configuration ###
+
+SM2/SM3/SM4 algorithm identifiers are in the IKE private-use range (>=1024).
+Both peers must enable private algorithm acceptance:
+
+    charon {
+        accept_private_algs = yes
+    }
+
+Required plugins: `openssl` (SM2/SM3/SM4 primitives) and `hmac` (HMAC-SM3
+signer and PRF construction).
+
+### Example: Full GuoMi IKEv2 ###
+
+    connections {
+        gm-host {
+            local_addrs = 192.168.0.1
+            remote_addrs = 192.168.0.2
+
+            local {
+                auth = pubkey
+                certs = moonCert.pem
+            }
+            remote {
+                auth = pubkey
+            }
+            children {
+                gm-child {
+                    mode = transport
+                    esp_proposals = sm4cbc-sm3
+                }
+            }
+            version = 2
+            proposals = sm4cbc-sm3-x25519
+        }
+    }
+
+This establishes an IKEv2 SA with SM4-CBC-128 encryption, HMAC-SM3-128
+integrity, PRF-HMAC-SM3, and Curve25519 key exchange, using SM2 certificate
+authentication with SM3 signatures.
+
+### Build ###
+
+    ./configure --enable-openssl --enable-hmac [other options...]
+    make
 
 
 ## Generating Certificates and CRLs ##
