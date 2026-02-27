@@ -245,6 +245,7 @@ static kernel_algorithm_t encryption_algs[] = {
 	{ENCR_SERPENT_CBC,			"serpent"			},
 	{ENCR_TWOFISH_CBC,			"twofish"			},
 	{ENCR_CHACHA20_POLY1305,	"rfc7539esp(chacha20,poly1305)"},
+	{ENCR_SM4_CBC,				"cbc(sm4)"			},
 };
 
 /**
@@ -266,6 +267,8 @@ static kernel_algorithm_t integrity_algs[] = {
 /*	{AUTH_KPDK_MD5,				"***"				}, */
 	{AUTH_AES_XCBC_96,			"xcbc(aes)"			},
 	{AUTH_AES_CMAC_96,			"cmac(aes)"			},
+	{AUTH_HMAC_SM3_128,			"hmac(sm3)"			},
+	{AUTH_HMAC_SM3_256,			"hmac(sm3)"			},
 };
 
 /**

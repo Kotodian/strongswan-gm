@@ -76,6 +76,10 @@ enum integrity_algorithm_t {
 	AUTH_HMAC_SHA2_512_512 = 1029,
 	/** draft-kanno-ipsecme-camellia-xcbc, not yet assigned by IANA */
 	AUTH_CAMELLIA_XCBC_96 = 1030,
+	/** HMAC-SM3 with 128-bit truncation (GB/T 32905-2016) */
+	AUTH_HMAC_SM3_128 = 1031,
+	/** HMAC-SM3 with full 256-bit output (GB/T 32905-2016) */
+	AUTH_HMAC_SM3_256 = 1032,
 };
 
 /**

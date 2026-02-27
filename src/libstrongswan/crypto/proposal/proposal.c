@@ -670,6 +670,8 @@ static const struct {
 	{AUTH_AES_XCBC_96,					PRF_AES128_XCBC					},
 	{AUTH_CAMELLIA_XCBC_96,				PRF_CAMELLIA128_XCBC			},
 	{AUTH_AES_CMAC_96,					PRF_AES128_CMAC					},
+	{AUTH_HMAC_SM3_128,					PRF_HMAC_SM3					},
+	{AUTH_HMAC_SM3_256,					PRF_HMAC_SM3					},
 };
 
 /**

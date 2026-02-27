@@ -179,6 +179,8 @@ hash_algorithm_t hasher_algorithm_from_prf(pseudo_random_function_t alg)
 			return HASH_SHA384;
 		case PRF_HMAC_SHA2_512:
 			return HASH_SHA512;
+		case PRF_HMAC_SM3:
+			return HASH_SM3;
 		case PRF_HMAC_TIGER:
 		case PRF_AES128_XCBC:
 		case PRF_AES128_CMAC:
@@ -208,6 +210,7 @@ hash_algorithm_t hasher_algorithm_from_integrity(integrity_algorithm_t alg,
 			case AUTH_HMAC_MD5_128:
 			case AUTH_HMAC_SHA1_128:
 			case AUTH_HMAC_SHA2_256_128:
+			case AUTH_HMAC_SM3_128:
 				*length = 16;
 				break;
 			case AUTH_HMAC_SHA1_160:
@@ -218,6 +221,7 @@ hash_algorithm_t hasher_algorithm_from_integrity(integrity_algorithm_t alg,
 				break;
 			case AUTH_HMAC_SHA2_256_256:
 			case AUTH_HMAC_SHA2_512_256:
+			case AUTH_HMAC_SM3_256:
 				*length = 32;
 				break;
 			case AUTH_HMAC_SHA2_384_384:
@@ -250,6 +254,9 @@ hash_algorithm_t hasher_algorithm_from_integrity(integrity_algorithm_t alg,
 		case AUTH_HMAC_SHA2_512_256:
 		case AUTH_HMAC_SHA2_512_512:
 			return HASH_SHA512;
+		case AUTH_HMAC_SM3_128:
+		case AUTH_HMAC_SM3_256:
+			return HASH_SM3;
 		case AUTH_AES_CMAC_96:
 		case AUTH_AES_128_GMAC:
 		case AUTH_AES_192_GMAC:
@@ -321,13 +328,21 @@ integrity_algorithm_t hasher_algorithm_to_integrity(hash_algorithm_t alg,
 					return AUTH_HMAC_SHA2_512_512;
 			}
 			break;
+		case HASH_SM3:
+			switch (length)
+			{
+				case 16:
+					return AUTH_HMAC_SM3_128;
+				case 32:
+					return AUTH_HMAC_SM3_256;
+			}
+			break;
 		case HASH_MD4:
 		case HASH_SHA224:
 		case HASH_SHA3_224:
 		case HASH_SHA3_256:
 		case HASH_SHA3_384:
 		case HASH_SHA3_512:
-		case HASH_SM3:
 		case HASH_IDENTITY:
 		case HASH_UNKNOWN:
 			break;
