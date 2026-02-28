@@ -14,7 +14,7 @@ jobs:
 
   fuzzing:
     needs: pre-check
-    if: ${{ needs.pre-check.outputs.should_skip != 'true' }}
+    if: ${{ needs.pre-check.outputs.should_skip != 'true' && github.repository == 'strongswan/strongswan' }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false

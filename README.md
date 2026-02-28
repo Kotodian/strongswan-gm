@@ -1,4 +1,4 @@
-**English** | [中文](README.zh-CN.md)
+**English** | <a href="README.zh-CN.md">中文</a>
 
 # strongSwan Configuration #
 
