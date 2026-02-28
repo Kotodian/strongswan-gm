@@ -132,7 +132,7 @@ START_TEST(test_sm2_gen)
 
 	ck_assert(key->get_encoding(key, PRIVKEY_PEM, &encoding));
 	ck_assert(encoding.ptr != NULL);
-	ck_assert(strstr(encoding.ptr, "PRIVATE KEY") != NULL);
+	ck_assert(strstr(encoding.ptr, "PRIVATE KEY"));
 	chunk_free(&encoding);
 
 	/* fingerprints */

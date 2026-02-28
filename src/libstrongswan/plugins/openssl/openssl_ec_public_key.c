@@ -186,6 +186,15 @@ error:
 
 #if OPENSSL_VERSION_NUMBER >= 0x1010100fL && !defined(OPENSSL_NO_SM2)
 /**
+ * Check if the given key is an SM2 key. Also used by private key and x509.
+ */
+bool openssl_is_sm2_key(EVP_PKEY *key)
+{
+	return EVP_PKEY_is_a(key, "SM2") ||
+		   openssl_check_ec_key_curve(key, NID_sm2);
+}
+
+/**
  * Verify a SM2 signature with SM3 hash, using the Distinguishing Identifier
  * as defined in GM/T 0009.
  */
@@ -233,8 +242,7 @@ METHOD(public_key_t, get_type, key_type_t,
 	private_openssl_ec_public_key_t *this)
 {
 #if OPENSSL_VERSION_NUMBER >= 0x1010100fL && !defined(OPENSSL_NO_SM2)
-	if (EVP_PKEY_is_a(this->key, "SM2") ||
-		openssl_check_ec_key_curve(this->key, NID_sm2))
+	if (openssl_is_sm2_key(this->key))
 	{
 		return KEY_SM2;
 	}
@@ -385,10 +393,11 @@ openssl_ec_public_key_t *openssl_ec_public_key_load(key_type_t type,
 		break;
 	}
 	{
+#if OPENSSL_VERSION_NUMBER >= 0x30000000L && !defined(OPENSSL_NO_SM2)
 		/* save original blob since d2i_PUBKEY advances the pointer */
 		const u_char *der = (const u_char*)blob.ptr;
 		size_t der_len = blob.len;
-
+#endif
 		key = d2i_PUBKEY(NULL, (const u_char**)&blob.ptr, blob.len);
 		if (!key)
 		{
@@ -401,7 +410,7 @@ openssl_ec_public_key_t *openssl_ec_public_key_load(key_type_t type,
 		}
 #if OPENSSL_VERSION_NUMBER >= 0x30000000L
 		if (EVP_PKEY_base_id(key) == EVP_PKEY_EC &&
-			openssl_check_ec_key_curve(key, NID_sm2))
+			openssl_is_sm2_key(key))
 		{
 			/* d2i_PUBKEY() created an EC-typed key for an id-ecPublicKey SPKI
 			 * with SM2 curve.  Re-decode as SM2 so OpenSSL 3.x handles SM2

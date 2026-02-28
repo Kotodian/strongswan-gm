@@ -82,6 +82,7 @@ static inline void X509_get0_signature(ASN1_BIT_STRING **psig, X509_ALGOR **palg
 #if OPENSSL_VERSION_NUMBER >= 0x1010100fL && !defined(OPENSSL_NO_SM2)
 /* from openssl_ec_public_key */
 bool openssl_check_ec_key_curve(EVP_PKEY *key, int nid_curve);
+bool openssl_is_sm2_key(EVP_PKEY *key);
 #endif
 
 typedef struct private_openssl_x509_t private_openssl_x509_t;
@@ -1227,6 +1228,7 @@ static bool parse_certificate(private_openssl_x509_t *this)
 	X509_ALGOR *alg;
 #endif
 	key_type_t ed_type = KEY_ED448;
+	key_type_t ec_type = KEY_ECDSA;
 
 	this->x509 = d2i_X509(NULL, &ptr, this->encoding.len);
 	if (!this->x509)
@@ -1260,13 +1262,18 @@ static bool parse_certificate(private_openssl_x509_t *this)
 					openssl_asn1_str2chunk(X509_get0_pubkey_bitstr(this->x509)),
 					BUILD_END);
 			break;
-		case OID_EC_PUBLICKEY:
-		{
-			key_type_t ec_type = KEY_ECDSA;
 #if OPENSSL_VERSION_NUMBER >= 0x1010100fL && !defined(OPENSSL_NO_SM2)
-			if (EVP_PKEY_is_a(X509_get0_pubkey(this->x509), "SM2") ||
-				openssl_check_ec_key_curve(X509_get0_pubkey(this->x509),
-										   NID_sm2))
+		case OID_SM2_PUBKEY:
+			/* SM2 certificates per GB/T 35276-2017 use the SM2 OID directly
+			 * as the SubjectPublicKeyInfo algorithm — fall through to EC
+			 * with ec_type preset */
+			ec_type = KEY_SM2;
+			/* fall-through */
+#endif
+		case OID_EC_PUBLICKEY:
+#if OPENSSL_VERSION_NUMBER >= 0x1010100fL && !defined(OPENSSL_NO_SM2)
+			if (ec_type != KEY_SM2 &&
+				openssl_is_sm2_key(X509_get0_pubkey(this->x509)))
 			{
 				ec_type = KEY_SM2;
 			}
@@ -1279,18 +1286,6 @@ static bool parse_certificate(private_openssl_x509_t *this)
 					chunk, BUILD_END);
 			free(chunk.ptr);
 			break;
-		}
-#if OPENSSL_VERSION_NUMBER >= 0x1010100fL && !defined(OPENSSL_NO_SM2)
-		case OID_SM2_PUBKEY:
-			/* SM2 certificates per GB/T 35276-2017 use the SM2 OID directly
-			 * as the SubjectPublicKeyInfo algorithm */
-			chunk = openssl_i2chunk(X509_PUBKEY, X509_get_X509_PUBKEY(this->x509));
-			this->pubkey = lib->creds->create(lib->creds,
-					CRED_PUBLIC_KEY, KEY_SM2, BUILD_BLOB_ASN1_DER,
-					chunk, BUILD_END);
-			free(chunk.ptr);
-			break;
-#endif
 		case OID_ED25519:
 			ed_type = KEY_ED25519;
 			/* fall-through */

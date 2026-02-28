@@ -63,6 +63,7 @@ struct private_openssl_ec_private_key_t {
 /* from openssl_ec_public_key */
 bool openssl_check_ec_key_curve(EVP_PKEY *key, int nid_curve);
 bool openssl_check_explicit_params(EVP_PKEY *key);
+bool openssl_is_sm2_key(EVP_PKEY *key);
 
 #if OPENSSL_VERSION_NUMBER >= 0x1010100fL && !defined(OPENSSL_NO_SM2)
 /**
@@ -237,8 +238,7 @@ METHOD(private_key_t, get_type, key_type_t,
 	private_openssl_ec_private_key_t *this)
 {
 #if OPENSSL_VERSION_NUMBER >= 0x1010100fL && !defined(OPENSSL_NO_SM2)
-	if (EVP_PKEY_is_a(this->key, "SM2") ||
-		openssl_check_ec_key_curve(this->key, NID_sm2))
+	if (openssl_is_sm2_key(this->key))
 	{
 		return KEY_SM2;
 	}
