@@ -78,9 +78,19 @@ START_TEST(test_sm2_sign)
 	ck_assert(pubkey->get_type(pubkey) == KEY_SM2);
 	ck_assert(pubkey->get_keysize(pubkey) == 256);
 
-	/* verify public key encoding roundtrip */
+	/* verify public key encoding roundtrip (OpenSSL 3.x may re-encode SM2
+	 * keys with the SM2 algorithm OID instead of id-ecPublicKey, so we
+	 * verify functionally rather than requiring exact byte equality) */
 	ck_assert(pubkey->get_encoding(pubkey, PUBKEY_SPKI_ASN1_DER, &encoding));
-	ck_assert_chunk_eq(encoding, sm2_pubkey);
+	ck_assert(encoding.len > 0);
+	{
+		public_key_t *reloaded;
+		reloaded = lib->creds->create(lib->creds, CRED_PUBLIC_KEY, KEY_SM2,
+						BUILD_BLOB_ASN1_DER, encoding, BUILD_END);
+		ck_assert_msg(reloaded != NULL, "SM2 public key reload failed");
+		ck_assert(reloaded->equals(reloaded, pubkey));
+		reloaded->destroy(reloaded);
+	}
 	chunk_free(&encoding);
 
 	/* derive public key from private key and compare */
